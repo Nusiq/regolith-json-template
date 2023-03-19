@@ -1,5 +1,5 @@
 Regolith-Json-Template
-=====================
+======================
 
 A Python package for easier reuseability of the JSON Template Regolith filter for Minecraft Bedrock Edition 
 
@@ -14,3 +14,4 @@ Installation
 .. code-block:: bash
 
    pip install regolith-json-template
+

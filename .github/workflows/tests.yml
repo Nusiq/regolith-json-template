@@ -1,0 +1,49 @@
+name: Tests
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+    - '**.py'
+    - '.github/workflows/**.yml'
+  pull_request:
+    branches: [ master ]
+    paths:
+    - '**.py'
+    - '.github/workflows/**.yml'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can
+    # access it
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      with:
+        submodules: recursive
+
+    - name: Cache git lfs
+      uses: actions/cache@v1.1.0
+      with:
+        path: .git/lfs
+        key: .git/lfs
+
+    - name: Pull lfs data, if not cached
+      run: git lfs pull
+
+    # Python 3.11 for mypy testing
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+
+    - name: Install dependencies
+      run: |
+        pip install tox
+    - name: Run Tox tests
+      run: |
+        cd $GITHUB_WORKSPACE
+        python -m tox

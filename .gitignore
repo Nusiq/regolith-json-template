@@ -1,0 +1,15 @@
+docs/_build
+test_packs/**
+build/*
+**/.mypy_cache/**
+dist/**
+**/*.egg-info/**
+*~
+*.swp
+*.swo
+.*.swp
+.*.swo
+**/.vscode/**
+.tox/**
+documentation/**
+**/__pycache__/**

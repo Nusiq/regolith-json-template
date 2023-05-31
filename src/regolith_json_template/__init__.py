@@ -1,15 +1,15 @@
-from itertools import chain
 from copy import deepcopy, copy
 import uuid
 import math
-from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
-VERSION = (1, 0, 0)
+VERSION = (1, 1, 0)
 __version__ = '.'.join([str(x) for x in VERSION])
 
 EVAL_STRING_OPEN = '`'
 EVAL_STRING_CLOSE = '`'
+LIST_UNPACK_KEY = '__unpack__'
+LIST_UNPACK_OPTIONAL_VALUE = '__value__'
 
 class JsonTemplateException(Exception):
     '''Root exception for json_template.'''
@@ -29,6 +29,14 @@ class JsonTemplateK:
         self.scope_extension: dict[str, Any] = kwargs
 
 
+class _Unpack(NamedTuple):
+    '''
+    _Unpack is an object that is used internally by the eval_json function to
+    pass lists to be unpacked up from an item of the list, to the list itself.
+    The value of the _Unpack object is a list of values to unpack.
+    '''
+    data: list[Any]
+
 def is_eval_string(text: str) -> tuple[bool, str]:
     '''
     Checks if text is a string to be evaluated and returns the result and the
@@ -44,42 +52,95 @@ def is_eval_string(text: str) -> tuple[bool, str]:
     return False, text
 
 
-def eval_json(data, scope: dict[str, Any]):
+def eval_json(data, scope: dict[str, Any], _is_list_item: bool = False):
     '''
     Walks JSON file (data) yields json paths. The behavior of the function is
     undefined if the data contains objects that can't be represended as JSON
     using json.dumps (e.g. sets, functions, etc.).
+
+    :param data: JSON data to be evaluated.
+    :param scope: A dictionary that will be used as a scope for evaluating
+        the template.
+    :param _is_list_item: An internally used flag that indicates if the data
+        is a list item. List items can be unpacked into multiple items in
+        some cases.
     '''
     if isinstance(data, dict):
-        keys = list(data.keys())
-        for k in keys:
-            is_eval_key, key = is_eval_string(k)
+        keys: list[tuple[str, None | list[str | JsonTemplateK]]] = []
+        is_unpacked = False
+        for k in data.keys():
+            if k == LIST_UNPACK_KEY and _is_list_item:
+                is_unpacked = True
+                continue
+            is_eval_key, stripped_key = is_eval_string(k)
             if is_eval_key:
-                evaluated_keys = eval_key(key, scope)
-                old_data_k_value = data[k]
-                del data[k]
-                last_item_index = len(evaluated_keys) - 1
-                for i, evaluated_key in enumerate(evaluated_keys):
-                    child_scope = scope  # No need for deepcopy
-                    if isinstance(evaluated_key, JsonTemplateK):
-                        child_scope = scope | evaluated_key.scope_extension
-                        evaluated_key = evaluated_key.key
-                    # Don't copy the last item, simply use the old value. Note
-                    # that it must be the last item not for example the first
-                    # one, because the next item always is based on the
-                    # old_data_k_value so it can't be evaluated when it needs
-                    # to be a source for other items.
-                    if i == last_item_index:
-                        data[evaluated_key] = old_data_k_value
-                    else:  # copy the rest
-                        data[evaluated_key] = deepcopy(old_data_k_value)
-                    data[evaluated_key] = eval_json(
-                        data[evaluated_key], child_scope)
+                keys.append((k, eval_key(stripped_key, scope)))
             else:
-                data[k] = eval_json(data[k], scope)
+                keys.append((k, None))
+
+        if is_unpacked:
+            scopes: list[dict[str, Any]]
+            if isinstance(data[LIST_UNPACK_KEY], list):
+                scopes = data[LIST_UNPACK_KEY]
+            elif isinstance(data[LIST_UNPACK_KEY], str):
+                is_unpak_eval_val, unpack_eval_val = is_eval_string(
+                    data[LIST_UNPACK_KEY])
+                if not is_unpak_eval_val:
+                    raise JsonTemplateException(
+                        f"The value of {LIST_UNPACK_KEY} must be a list or "
+                        "an eval string.")
+                scopes = eval_value(unpack_eval_val, scope)
+            del data[LIST_UNPACK_KEY]
+            if LIST_UNPACK_OPTIONAL_VALUE in data:
+                if len(data) > 1:
+                    raise JsonTemplateException(
+                        f"{LIST_UNPACK_OPTIONAL_VALUE} can't be used with "
+                        "other keys.")
+                data_template = data[LIST_UNPACK_OPTIONAL_VALUE]
+                del data[LIST_UNPACK_OPTIONAL_VALUE]
+            else:
+                data_template = data
+            data = _Unpack([])
+            for i, scope in enumerate(scopes): 
+                if i == len(scopes) - 1:
+                    # No need to copy the last item, we can simply use the
+                    # original data_template (we don't need it anymore).
+                    data.data.append(eval_json(data_template, scope))
+                else:
+                    data.data.append(eval_json(deepcopy(data_template), scope))
+        else:
+            for k, evaluated_keys in keys:
+                if isinstance(evaluated_keys, list):
+                    old_data_k_value = data[k]
+                    del data[k]
+                    last_item_index = len(evaluated_keys) - 1
+                    for i, evaluated_key in enumerate(evaluated_keys):
+                        child_scope = scope  # No need for deepcopy
+                        if isinstance(evaluated_key, JsonTemplateK):
+                            child_scope = scope | evaluated_key.scope_extension
+                            evaluated_key = evaluated_key.key
+                        # Don't copy the last item, simply use the old value. Note
+                        # that it must be the last item not for example the first
+                        # one, because the next item always is based on the
+                        # old_data_k_value so it can't be evaluated when it needs
+                        # to be a source for other items.
+                        if i == last_item_index:
+                            data[evaluated_key] = old_data_k_value
+                        else:  # copy the rest
+                            data[evaluated_key] = deepcopy(old_data_k_value)
+                        data[evaluated_key] = eval_json(
+                            data[evaluated_key], child_scope)
+                else:
+                    data[k] = eval_json(data[k], scope)
     elif isinstance(data, list):
-        for i in range(len(data)):
-            data[i] = eval_json(data[i], scope)
+        new_data = []
+        for item in data:
+            eval_item = eval_json(item, scope, True)
+            if isinstance(eval_item, _Unpack):
+                new_data.extend(eval_item.data)
+            else:
+                new_data.append(eval_item)
+        data = new_data
     elif isinstance(data, str):
         is_eval_val, data = is_eval_string(data)
         if is_eval_val:

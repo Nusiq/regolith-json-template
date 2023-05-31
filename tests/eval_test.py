@@ -44,7 +44,79 @@ import pytest
                 "bar": 1
             }
         }
-    )
+    ),
+    (
+        [  # source
+            {
+                "my_favourite_color": "I don't know"
+            },
+            {
+                "__unpack__": [{"color": "red"}, {"color": "green"}],
+                "my_favourite_color": "`color.upper()`"
+            },
+            {
+                "my_favourite_color": "BLACK"
+            }
+        ],
+        [  # expected
+            {
+                "my_favourite_color": "I don't know"
+            },
+            {
+                "my_favourite_color": "RED"
+            },
+            {
+                "my_favourite_color": "GREEN"
+            },
+            {
+                "my_favourite_color": "BLACK"
+            }
+        ]
+    ),
+    (
+        [  # source
+            {
+                "my_favourite_color": "I don't know"
+            },
+            {
+                "__unpack__": "`[dict(color=c) for c in ('red', 'green')]`",
+                "my_favourite_color": "`color.upper()`"
+            },
+            {
+                "my_favourite_color": "BLACK"
+            }
+        ],
+        [  # expected
+            {
+                "my_favourite_color": "I don't know"
+            },
+            {
+                "my_favourite_color": "RED"
+            },
+            {
+                "my_favourite_color": "GREEN"
+            },
+            {
+                "my_favourite_color": "BLACK"
+            }
+        ]
+    ),
+    (
+        [  # source
+            "It's not green",
+            {
+                "__unpack__": "`[dict(color=c) for c in ('red', 'green')]`",
+                "__value__": "`color == 'green'`"
+            },
+            "Not green"
+        ],
+        [  # expected
+            "It's not green",
+            False,
+            True,
+            "Not green"
+        ]
+    ),
 ])
 def test_eval(source, expected):
     scope = DEFAULT_SCOPE | {'foo': 12345}

@@ -4,22 +4,12 @@ import uuid
 import math
 from pathlib import Path
 from typing import Any
+
 VERSION = (1, 0, 0)
 __version__ = '.'.join([str(x) for x in VERSION])
 
-
-DATA_PATH = Path('data')
-BP_PATH = Path('BP')
-RP_PATH = Path('RP')
-
 EVAL_STRING_OPEN = '`'
 EVAL_STRING_CLOSE = '`'
-
-
-def print_red(text):
-    for t in text.split('\n'):
-        print("\033[91m {}\033[00m".format(t))
-
 
 class JsonTemplateException(Exception):
     '''Root exception for json_template.'''

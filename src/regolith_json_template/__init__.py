@@ -1,9 +1,10 @@
 from copy import deepcopy, copy
 import uuid
 import math
+import random
 from typing import Any, NamedTuple
 
-VERSION = (1, 1, 0)
+VERSION = (1, 2, 0)
 __version__ = '.'.join([str(x) for x in VERSION])
 
 EVAL_STRING_OPEN = '`'
@@ -28,6 +29,14 @@ class JsonTemplateK:
         self.key: str = __key
         self.scope_extension: dict[str, Any] = kwargs
 
+class JsonTemplateJoinStr:
+    '''
+    A data class used during the evalution of the template as a first item
+    of a list of strings to join and convert to one string. In JSON files
+    this class is known as "JoinStr" to reduce the amount of characters
+    '''
+    def __init__(self, join_str: str):
+        self.join_str = join_str
 
 class _Unpack(NamedTuple):
     '''
@@ -133,13 +142,28 @@ def eval_json(data, scope: dict[str, Any], _is_list_item: bool = False):
                 else:
                     data[k] = eval_json(data[k], scope)
     elif isinstance(data, list):
+        join_strings: JsonTemplateJoinStr | None = None
         new_data = []
-        for item in data:
+        for i, item in enumerate(data):
             eval_item = eval_json(item, scope, True)
             if isinstance(eval_item, _Unpack):
-                new_data.extend(eval_item.data)
+                if (
+                        i == 0 and len(eval_item.data) > 0 and
+                        isinstance(eval_item.data[0], JsonTemplateJoinStr)):
+                    join_strings = eval_item.data[0]
+                    new_data.extend(eval_item.data[1:])
+                else:
+                    new_data.extend(eval_item.data)
+            elif i == 0 and isinstance(eval_item, JsonTemplateJoinStr):
+                join_strings = eval_item
             else:
                 new_data.append(eval_item)
+        if join_strings is not None:
+            try:
+                new_data = join_strings.join_str.join(new_data)
+            except TypeError as e:
+                raise JsonTemplateException(
+                    "Can't join non-string values using 'JoinStr'.") from e
         data = new_data
     elif isinstance(data, str):
         is_eval_val, data = is_eval_string(data)
@@ -188,7 +212,7 @@ def eval_value(value: str, scope: dict[str, Any]) -> Any:
 
 DEFAULT_SCOPE = {
     'true': True, 'false': False, 'math': math, 'uuid': uuid,
-    "K": JsonTemplateK}
+    "random": random, "K": JsonTemplateK, "JoinStr": JsonTemplateJoinStr}
 '''
 The default socpe to be merged with the scope passed by the user in the regolith
 filter.

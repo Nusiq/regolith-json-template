@@ -117,6 +117,31 @@ import pytest
             "Not green"
         ]
     ),
+    (
+        [  # source
+            "`JoinStr(';')`",
+            "a = 1",
+            "b = 2",
+            "c = 3",
+        ],
+        # expected
+        "a = 1;b = 2;c = 3"
+    ),
+    (
+        [  # source
+            {
+                # This code is nonsense but it tests passing the JoinStr through
+                # __unpack__ and __value__.
+                "__unpack__": "`[dict(value=v) for v in (JoinStr(' '), 'hi', 'there')]`",
+                "__value__": "`value`"
+            },
+            "hello",
+            "there",
+            "it's me",
+        ],
+        # expected
+        "hi there hello there it's me"
+    ),
 ])
 def test_eval(source, expected):
     scope = DEFAULT_SCOPE | {'foo': 12345}

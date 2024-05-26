@@ -4,7 +4,7 @@ import math
 import random
 from typing import Any, NamedTuple
 
-VERSION = (1, 2, 0)
+VERSION = (1, 3, 0)
 __version__ = '.'.join([str(x) for x in VERSION])
 
 EVAL_STRING_OPEN = '`'
@@ -137,10 +137,20 @@ def eval_json(data, scope: dict[str, Any], _is_list_item: bool = False):
                             data[evaluated_key] = old_data_k_value
                         else:  # copy the rest
                             data[evaluated_key] = deepcopy(old_data_k_value)
-                        data[evaluated_key] = eval_json(
+                        evaluated_value = eval_json(
                             data[evaluated_key], child_scope)
+                        # Ellipsis (...) is used as no value indicator.
+                        if evaluated_value != ...:
+                            data[evaluated_key] = evaluated_value
+                        elif evaluated_key in data:
+                            del data[evaluated_key]
                 else:
-                    data[k] = eval_json(data[k], scope)
+                    evaluated_value = eval_json(data[k], scope)
+                    # Ellipsis (...) is used as no value indicator.
+                    if evaluated_value != ...:
+                        data[k] = evaluated_value
+                    elif k in data:
+                        del data[k]
     elif isinstance(data, list):
         join_strings: JsonTemplateJoinStr | None = None
         new_data = []

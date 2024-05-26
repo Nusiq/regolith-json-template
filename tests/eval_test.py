@@ -142,6 +142,16 @@ import pytest
         # expected
         "hi there hello there it's me"
     ),
+    (
+        {  # source
+            "foo": "`... if True else 12345`",
+            "`str(5+5)`": "`...`",
+            "bar": {"baz": "`...`"}
+        },
+        {  # expected
+            "bar": {}
+        }
+    )
 ])
 def test_eval(source, expected):
     scope = DEFAULT_SCOPE | {'foo': 12345}
